@@ -3,7 +3,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>Registro Pedidos - El Misti</title>
 
 <style>
@@ -269,17 +269,19 @@ button:hover{
 
 /* COLUMNAS INI Y DISP */
 .colIni{
-  width:40px; 
+  width:60px; /* 🔥 Más ancho para facilitar toque en celular */
+  height:40px;
   padding:4px;
   border-radius:6px;
   border:1px solid #e0e0e0;
   font-weight:600;
   text-align:center;
   background:#f8f9fa;
-  font-size:14px;
+  font-size:16px;
   transition:all .25s ease;
   outline:none;
   flex-shrink: 0;
+  z-index: 10;
 }
 
 .colIni:hover{
@@ -291,6 +293,7 @@ button:hover{
   border-color:#4CAF50;
   box-shadow:0 0 0 2px rgba(76,175,80,.2);
   background:white;
+  font-size: 16px; 
 }
 
 .colIni:not([value="0"]){
@@ -395,11 +398,10 @@ button:hover{
     font-size:15px;
   }
   .colIni {
-    width: 35px;
-    font-size: 12px;
+    width: 50px; 
+    font-size: 14px;
   }
   .controls button {
-     /* Mantener botones grandes incluso en móvil pequeño */
      padding: 10px 16px;
      font-size: 18px;
   }
@@ -605,7 +607,7 @@ button:hover{
               👁
             </button>
 
-            <div class="colIni" style="width:30px">Ini</div>
+            <div class="colIni" style="width:50px; font-size:12px;">Ini</div>
             <div style="width:30px">Disp</div>
             <div style="flex:1">Entradas</div>
 
@@ -626,7 +628,7 @@ button:hover{
               👁
             </button>
 
-            <div class="colIni" style="width:30px">Ini</div>
+            <div class="colIni" style="width:50px; font-size:12px;">Ini</div>
             <div style="width:30px">Disp</div>
             <div style="flex:1">Segundos</div>
 
@@ -794,7 +796,7 @@ async function enviarImpresion(index){
 }
 
           /* =================================================
-            🔥 STOCK EN TIEMPO REAL DESDE FIRESTORE
+            🔥 STOCK EN TIEMPO REAL DESDE FIREBASE
           ================================================= */
 
 function cambiarVista(vista){
@@ -1232,6 +1234,9 @@ function marcarServido(indexPedido, nombre, tipo){
 
 
 
+          // 🔥 CACHE LOCAL PARA CÁLCULOS INSTANTÁNEOS
+          let stockCache = {}; 
+
           function escucharStock(seccion, total, prefijo){
 
             for(let i=0;i<total;i++){
@@ -1243,31 +1248,34 @@ function marcarServido(indexPedido, nombre, tipo){
                 .collection("items")
                 .doc(id);
 
-              ref.get().then(doc=>{
-                if(!doc.exists){
+              // 🔥 USAMOS UN SOLO LISTENER QUE INICIALIZA Y ESCUCHA
+              ref.onSnapshot((doc) => {
+                
+                if (!doc.exists) {
+                  // Si no existe, lo creamos con valores por defecto
                   ref.set({
                     inicial: 0,
                     vendido: 0,
                     nombre: ""
                   });
+                  return;
                 }
-              });
-
-              ref.onSnapshot(doc=>{
-
-                if(!doc.exists) return;
 
                 const data = doc.data();
 
-                const inicial = data.inicial || 0;
-                const vendido = data.vendido || 0;
+                const inicial = Number(data.inicial) || 0;
+                const vendido = Number(data.vendido) || 0;
                 const nombre = data.nombre || "";
-
                 const disponible = Math.max(inicial - vendido, 0);
 
-                const inputNombre = document.querySelector(
-                  `input[data-nombre='${id}']`
-                );
+                // Guardar en caché local para cálculos rápidos
+                stockCache[id] = { 
+                    inicial: inicial, 
+                    vendido: vendido 
+                };
+
+                // Actualizar Nombre
+                const inputNombre = document.querySelector(`input[data-nombre='${id}']`);
                 if(inputNombre){
                   inputNombre.value = nombre;
                   if(disponible <= 0){
@@ -1279,13 +1287,16 @@ function marcarServido(indexPedido, nombre, tipo){
                   }
                 }
 
-                const inputIni = document.querySelector(
-                  `input[data-stock='${id}']`
-                );
+                // Actualizar Input Ini (Solo si el usuario no está escribiendo para evitar saltos)
+                const inputIni = document.querySelector(`input[data-stock='${id}']`);
                 if(inputIni){
-                  inputIni.value = inicial;
+                   // Solo actualizamos visualmente si el valor cambió realmente
+                   if(inputIni.value != inicial) {
+                       inputIni.value = inicial;
+                   }
                 }
 
+                // Actualizar Disp
                 const span = document.getElementById("disp_"+id);
                 if(span){
                   span.innerText = disponible;
@@ -1293,9 +1304,7 @@ function marcarServido(indexPedido, nombre, tipo){
                 }
 
               });
-
             }
-
           }
 
 
@@ -1364,6 +1373,8 @@ function marcarServido(indexPedido, nombre, tipo){
               <input
                 class="colIni"
                 type="number"
+                inputmode="decimal"
+                autocomplete="off"
                 min="0"
                 data-stock="${key}"
                 oninput="actualizarInicialFirestore('${prefijo}','${key}',this.value)"
@@ -2478,6 +2489,22 @@ function copiarTextoPedido(index){
 
 
           function actualizarInicialFirestore(prefijo,id,valor){
+            
+            const nuevaInicial = parseInt(valor) || 0;
+            const vendido = stockCache[id]?.vendido || 0;
+            
+            // 🔥 CÁLCULO INMEDIATO (Feedback Instantáneo)
+            const nuevoDisp = Math.max(nuevaInicial - vendido, 0);
+            
+            const span = document.getElementById("disp_" + id);
+            if(span){
+                span.innerText = nuevoDisp;
+                span.style.color = nuevoDisp <= 0 ? "red" : "black";
+            }
+            
+            // Actualizar caché inmediatamente
+            if(!stockCache[id]) stockCache[id] = {};
+            stockCache[id].inicial = nuevaInicial;
 
             const seccion = prefijo === "E" ? "entradas" : "segundos";
 
@@ -2486,7 +2513,7 @@ function copiarTextoPedido(index){
               .collection("items")
               .doc(id)
               .set({
-                inicial: parseInt(valor) || 0
+                inicial: nuevaInicial
               }, { merge:true });
 
           }
