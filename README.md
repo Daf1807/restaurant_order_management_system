@@ -190,19 +190,6 @@ Este proyecto no solo fue un ejercicio técnico, sino una lección sobre adopci�
 
 ---
 
-## 📸 Capturas
-
-> _Agrega aquí capturas de pantalla de la vista meseros, cocina, clientes y la app Flutter._
-
-```text
-/docs/screenshots/meseros.png
-/docs/screenshots/cocina.png
-/docs/screenshots/clientes.png
-/docs/screenshots/app_flutter.png
-```
-
----
-
 ## 👤 Autor
 
 **Diego (Daf1807)**
